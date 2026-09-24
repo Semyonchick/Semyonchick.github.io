@@ -16,12 +16,12 @@
   <p id="status">Нажмите кнопку и разрешите приложению публикацию в VK.</p>
   <button id="login">Войти через VK</button>
   <section id="result" hidden>
-    <p><b>Токен получен.</b> Скопируйте его и отправьте боту @getChanelDataBot. Не пересылайте токен другим людям.</p>
+    <p><b>Код подключения получен.</b> Скопируйте его и отправьте боту @getChanelDataBot. Код одноразовый.</p>
     <textarea id="token" readonly></textarea>
-    <button id="copy">Скопировать токен</button>
+    <button id="copy">Скопировать код подключения</button>
   </section>
   <p id="error" class="error"></p>
-  <p class="muted">Токен обрабатывается только в этом браузере и никуда с этой страницы не отправляется.</p>
+  <p class="muted">OAuth-код обрабатывается только в этом браузере и передаётся серверу исключительно через личный чат с ботом.</p>
   <script src="vkid-sdk.js"></script>
   <script>
     const APP_ID=54787264;
@@ -55,12 +55,15 @@
     if(returnedCode&&returnedDevice&&savedVerifier){
       document.querySelector('#login').hidden=true;
       document.querySelector('#status').textContent='Проверяем ответ VK…';
-      ready.then(()=>VKID.Auth.exchangeCode(returnedCode,returnedDevice,verifier)).then(data=>{
+      ready.then(()=>{
+        const payload=JSON.stringify({code:returnedCode,device_id:returnedDevice,code_verifier:verifier,state});
+        const bytes=new TextEncoder().encode(payload);
+        let binary=''; bytes.forEach(value=>binary+=String.fromCharCode(value));
+        document.querySelector('#status').textContent='Авторизация подтверждена.';
+        document.querySelector('#token').value='VKCODE.'+btoa(binary).replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/,'');
+        document.querySelector('#result').hidden=false;
         localStorage.removeItem('vk_oauth_verifier');
         localStorage.removeItem('vk_oauth_state');
-        document.querySelector('#status').textContent='Авторизация завершена.';
-        document.querySelector('#token').value=data.access_token;
-        document.querySelector('#result').hidden=false;
         history.replaceState({},'',REDIRECT);
       }).catch(showError);
     }else if(returnedCode){

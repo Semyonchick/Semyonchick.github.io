@@ -28,26 +28,44 @@
     const REDIRECT='https://semyonchick.github.io/tg2max/vk-callback.html';
     const VKID=window.VKIDSDK;
     const params=new URLSearchParams(location.search);
-    const state=sessionStorage.getItem('vk_oauth_state')||(crypto.randomUUID?crypto.randomUUID():String(Date.now()));
-    sessionStorage.setItem('vk_oauth_state',state);
-    document.querySelector('#login').onclick=()=>{
-      try{VKID.Auth.login().catch(showError)}catch(error){showError(error)}
+    const returnedCode=params.get('code');
+    const returnedDevice=params.get('device_id');
+    const savedVerifier=localStorage.getItem('vk_oauth_verifier');
+    const state=localStorage.getItem('vk_oauth_state')||(crypto.randomUUID?crypto.randomUUID():String(Date.now()));
+    localStorage.setItem('vk_oauth_state',state);
+    const verifier=savedVerifier||randomVerifier();
+    localStorage.setItem('vk_oauth_verifier',verifier);
+    function randomVerifier(){
+      const bytes=crypto.getRandomValues(new Uint8Array(48));
+      return btoa(String.fromCharCode(...bytes)).replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/,'');
+    }
+    async function challenge(value){
+      const digest=await crypto.subtle.digest('SHA-256',new TextEncoder().encode(value));
+      return btoa(String.fromCharCode(...new Uint8Array(digest))).replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/,'');
+    }
+    function showError(error){document.querySelector('#error').textContent=typeof error==='string'?error:JSON.stringify(error,null,2)}
+    const ready=(async()=>{
+      if(!VKID) throw new Error('VK ID SDK не загрузился. Обновите страницу без блокировщика рекламы.');
+      VKID.Config.init({app:APP_ID,redirectUrl:REDIRECT,state,codeVerifier:verifier,codeChallenge:await challenge(verifier),scope:'wall photos video groups',mode:VKID.ConfigAuthMode.Redirect});
+    })().catch(error=>{showError(error);throw error});
+    document.querySelector('#login').onclick=async()=>{
+      try{await ready;await VKID.Auth.login()}catch(error){showError(error)}
     };
     document.querySelector('#copy').onclick=async()=>{await navigator.clipboard.writeText(document.querySelector('#token').value);document.querySelector('#copy').textContent='Скопировано'};
-    function showError(error){document.querySelector('#error').textContent=typeof error==='string'?error:JSON.stringify(error,null,2)}
-    try{
-      if(!VKID) throw new Error('VK ID SDK не загрузился. Обновите страницу без блокировщика рекламы.');
-      VKID.Config.init({app:APP_ID,redirectUrl:REDIRECT,state,scope:'wall photos video groups',mode:VKID.ConfigAuthMode.Redirect});
-    }catch(error){showError(error)}
-    if(VKID&&params.get('code')&&params.get('device_id')){
+    if(returnedCode&&returnedDevice&&savedVerifier){
       document.querySelector('#login').hidden=true;
       document.querySelector('#status').textContent='Проверяем ответ VK…';
-      VKID.Auth.exchangeCode(params.get('code'),params.get('device_id')).then(data=>{
+      ready.then(()=>VKID.Auth.exchangeCode(returnedCode,returnedDevice,verifier)).then(data=>{
+        localStorage.removeItem('vk_oauth_verifier');
+        localStorage.removeItem('vk_oauth_state');
         document.querySelector('#status').textContent='Авторизация завершена.';
         document.querySelector('#token').value=data.access_token;
         document.querySelector('#result').hidden=false;
         history.replaceState({},'',REDIRECT);
       }).catch(showError);
+    }else if(returnedCode){
+      history.replaceState({},'',REDIRECT);
+      showError('Предыдущая попытка устарела. Нажмите «Войти через VK» ещё раз.');
     }
   </script>
 </body>

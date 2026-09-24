@@ -22,19 +22,24 @@
   </section>
   <p id="error" class="error"></p>
   <p class="muted">Токен обрабатывается только в этом браузере и никуда с этой страницы не отправляется.</p>
-  <script src="https://unpkg.com/@vkid/sdk@2.6.1/dist-sdk/umd/index.js"></script>
+  <script src="vkid-sdk.js"></script>
   <script>
     const APP_ID=54787264;
     const REDIRECT='https://semyonchick.github.io/tg2max/vk-callback.html';
     const VKID=window.VKIDSDK;
     const params=new URLSearchParams(location.search);
-    const state=sessionStorage.getItem('vk_oauth_state')||crypto.randomUUID();
+    const state=sessionStorage.getItem('vk_oauth_state')||(crypto.randomUUID?crypto.randomUUID():String(Date.now()));
     sessionStorage.setItem('vk_oauth_state',state);
-    VKID.Config.init({app:APP_ID,redirectUrl:REDIRECT,state,scope:'wall photos video groups offline',mode:VKID.ConfigAuthMode.Redirect});
-    document.querySelector('#login').onclick=()=>VKID.Auth.login().catch(showError);
+    document.querySelector('#login').onclick=()=>{
+      try{VKID.Auth.login().catch(showError)}catch(error){showError(error)}
+    };
     document.querySelector('#copy').onclick=async()=>{await navigator.clipboard.writeText(document.querySelector('#token').value);document.querySelector('#copy').textContent='Скопировано'};
     function showError(error){document.querySelector('#error').textContent=typeof error==='string'?error:JSON.stringify(error,null,2)}
-    if(params.get('code')&&params.get('device_id')){
+    try{
+      if(!VKID) throw new Error('VK ID SDK не загрузился. Обновите страницу без блокировщика рекламы.');
+      VKID.Config.init({app:APP_ID,redirectUrl:REDIRECT,state,scope:'wall photos video groups',mode:VKID.ConfigAuthMode.Redirect});
+    }catch(error){showError(error)}
+    if(VKID&&params.get('code')&&params.get('device_id')){
       document.querySelector('#login').hidden=true;
       document.querySelector('#status').textContent='Проверяем ответ VK…';
       VKID.Auth.exchangeCode(params.get('code'),params.get('device_id')).then(data=>{
